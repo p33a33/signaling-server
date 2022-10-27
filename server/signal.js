@@ -14,6 +14,8 @@ const io = new Server(9001, {
   },
 });
 
+let availableUsers = [];
+
 io.on("connect", (socket) => {
   console.log("websocket is opened");
   console.log(socket);
@@ -23,9 +25,30 @@ io.on("connect", (socket) => {
     socket.emit("message", "yo");
   });
 
+  socket.addListener("user:new", (name) => {
+    console.log("new user", name);
+    socket.broadcast.emit("user:new", { name, id: socket.id });
+    availableUsers.push({ name, id: socket.id, state: "AVAILABLE" });
+  });
+
   socket.addListener("user:available", (name) => {
     console.log("new available user", name);
     socket.broadcast.emit("user:available", { name, id: socket.id });
+  });
+
+  socket.addListener("user:unavailable", (name) => {
+    console.log("unavailable user");
+    socket.broadcast.emit("user:unavailable", name);
+    availableUsers = availableUsers.map((user) => {
+      if (name === user.name) {
+        return {
+          ...user,
+          state: "UNAVAILABLE",
+        };
+      } else {
+        return user;
+      }
+    });
   });
 
   socket.addListener("user:deleted", (name) => {
@@ -38,13 +61,18 @@ io.on("connect", (socket) => {
     socket.to(id);
   });
 
-  socket.addListener("offer", (offer, targetUserId) => {
-    socket.to(targetUserId).emit("offer", { offer, targetUserId });
+  socket.addListener("connect:reject", (callerId) => {
+    socket.to(callerId).emit("connect:reject");
   });
 
-  socket.addListener("answer", (answer, offerUserid) => {
+  socket.addListener("offer", (offer, targetUserId) => {
+    socket.to(targetUserId).emit("offer", { offer, callerId: socket.id });
+  });
+
+  socket.addListener("answer", (answer, callerId) => {
     console.log(answer);
-    socket.to(offerUserid).emit("answer", { answer, offerUserid });
+    console.log(callerId);
+    socket.to(callerId).emit("answer", answer);
   });
 
   socket.addListener("new-ice-candidate", (candidate) => {
